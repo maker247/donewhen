@@ -8,6 +8,7 @@
 	import { navOpen, connectionLost, quickCapture } from '$lib/ui.js';
 	import { activeWorkspace, activeInitiative, initiatives, activeProject, loadIssues } from '$lib/store.js';
 	import WorkspaceMenu from './WorkspaceMenu.svelte';
+	import NotificationBell from './NotificationBell.svelte';
 	import { Menu, ChevronRight, ChevronDown, Check, Plus } from '@lucide/svelte';
 
 	// crumb: the page's own name ("Board", "Inbox", …), or — for a page that
@@ -19,6 +20,7 @@
 	// entry a link back to the section). Workspace and Project now lead the
 	// path, so a leading link crumb is dropped; /tasks is labelled "Tasks".
 	let { crumb = '', crumbs = null, children } = $props();
+	const canWrite = $derived(['owner', 'admin', 'member'].includes($activeWorkspace?.role));
 	const tail = $derived.by(() => {
 		if (crumbs) {
 			const list = crumbs.filter((c, i) => !(i === 0 && c.href && crumbs.length > 1));
@@ -103,10 +105,13 @@
 		</nav>
 		<div class="right">
 			{@render children?.()}
-			<button class="btn primary new-issue" onclick={() => quickCapture.set(true)} aria-label="New issue">
-				<Plus size={14} strokeWidth={2.4} class="plus-ic" />
-				<span class="ni-label">New issue</span><kbd class="kbd">N</kbd>
-			</button>
+			<NotificationBell />
+			{#if canWrite}
+				<button class="btn primary new-issue" onclick={() => quickCapture.set(true)} aria-label="New issue">
+					<Plus size={14} strokeWidth={2.4} class="plus-ic" />
+					<span class="ni-label">New issue</span><kbd class="kbd">N</kbd>
+				</button>
+			{/if}
 		</div>
 	</div>
 	{#if $connectionLost}
@@ -147,6 +152,7 @@
 		gap: 6px;
 		min-width: 0;
 		color: var(--ink-3);
+		overflow: hidden;
 	}
 	.crumbs :global(.sep) {
 		flex-shrink: 0;
@@ -264,6 +270,7 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
+		flex-shrink: 0;
 	}
 	.new-issue {
 		flex: none;

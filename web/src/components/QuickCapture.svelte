@@ -3,13 +3,15 @@
 	// description, epic, labels and priority are optional extras, not a full
 	// issue form (that's the issue detail page's job).
 	import { api } from '$lib/api.js';
-	import { projects, labels, labelGroups, activeProject, loadIssues, PRIORITIES } from '$lib/store.js';
+	import { projects, labels, labelGroups, activeProject, loadIssues, PRIORITIES, activeWorkspace } from '$lib/store.js';
 	import { quickCapture, showToast, openIssue } from '$lib/ui.js';
 	import { validateTitle, toggleLabel, hasDraft, TITLE_MAX } from '$lib/capture.js';
 	import { X } from '@lucide/svelte';
 	import { get } from 'svelte/store';
 	import EpicMenu from './EpicMenu.svelte';
 	import PriorityIcon from './PriorityIcon.svelte';
+
+	const canWrite = $derived(['owner', 'admin', 'member'].includes($activeWorkspace?.role));
 
 	let title = $state('');
 	let description = $state('');
@@ -25,6 +27,11 @@
 
 	$effect(() => {
 		if ($quickCapture) {
+			if (!canWrite) {
+				quickCapture.set(false);
+				showToast('Read-only: viewer role cannot create issues', 'error');
+				return;
+			}
 			lastFocused = document.activeElement;
 			title = '';
 			description = '';

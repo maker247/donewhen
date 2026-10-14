@@ -41,10 +41,26 @@ const (
 	RoleOwner  = "owner"
 	RoleAdmin  = "admin"
 	RoleMember = "member"
+	RoleViewer = "viewer"
 )
 
 // CanAdmin reports whether a role may change a workspace or its membership.
 func CanAdmin(role string) bool { return role == RoleOwner || role == RoleAdmin }
+
+// CanWrite reports whether a role may create, edit, move, or delete workspace content.
+func CanWrite(role string) bool {
+	return role == RoleOwner || role == RoleAdmin || role == RoleMember
+}
+
+// CanComment reports whether a role may post comments. All workspace roles including viewer can comment.
+func CanComment(role string) bool {
+	return role == RoleOwner || role == RoleAdmin || role == RoleMember || role == RoleViewer
+}
+
+// IsValidRole reports whether role is one of the recognized workspace roles.
+func IsValidRole(role string) bool {
+	return role == RoleOwner || role == RoleAdmin || role == RoleMember || role == RoleViewer
+}
 
 // Membership is a workspace as seen by one user, carrying their role in it.
 type Membership struct {

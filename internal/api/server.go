@@ -139,6 +139,20 @@ func (s *Server) resolveGuard(next http.HandlerFunc, requested func(*http.Reques
 	})
 }
 
+// writeGuard is wsGuard plus write-permission enforcement: it rejects callers
+// whose role in the active workspace is viewer. Viewers have read-only access
+// across the workspace and may comment, but may not create, edit, move or delete
+// issues, epics, documents, criteria, views or labels.
+func (s *Server) writeGuard(next http.HandlerFunc) http.HandlerFunc {
+	return s.wsGuard(func(w http.ResponseWriter, r *http.Request) {
+		if !canWrite(r) {
+			writeErr(w, http.StatusForbidden, "read-only access: viewer role cannot modify workspace content")
+			return
+		}
+		next(w, r)
+	})
+}
+
 // adminOnly rejects a member trying to administer a workspace. The UI hides
 // these actions, but hiding a button is not access control.
 func (s *Server) adminOnly(next http.HandlerFunc) http.HandlerFunc {
@@ -215,32 +229,32 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/states/{id}", s.wsGuard(s.handleGetState))
 	mux.HandleFunc("GET /api/labels", s.wsGuard(s.handleListLabels))
 	mux.HandleFunc("GET /api/label-groups", s.wsGuard(s.handleListLabelGroups))
-	mux.HandleFunc("POST /api/labels", s.wsGuard(s.handleCreateLabel))
+	mux.HandleFunc("POST /api/labels", s.writeGuard(s.handleCreateLabel))
 
 	// Initiatives.
 	mux.HandleFunc("GET /api/initiatives", s.wsGuard(s.handleListInitiatives))
-	mux.HandleFunc("POST /api/initiatives", s.wsGuard(s.handleSaveInitiative))
+	mux.HandleFunc("POST /api/initiatives", s.writeGuard(s.handleSaveInitiative))
 	mux.HandleFunc("GET /api/initiatives/{id}", s.wsGuard(s.handleGetInitiative))
-	mux.HandleFunc("PATCH /api/initiatives/{id}", s.wsGuard(s.handleUpdateInitiative))
-	mux.HandleFunc("DELETE /api/initiatives/{id}", s.wsGuard(s.handleDeleteInitiative))
+	mux.HandleFunc("PATCH /api/initiatives/{id}", s.writeGuard(s.handleUpdateInitiative))
+	mux.HandleFunc("DELETE /api/initiatives/{id}", s.writeGuard(s.handleDeleteInitiative))
 
 	// Projects.
 	mux.HandleFunc("GET /api/projects", s.wsGuard(s.handleListProjects))
-	mux.HandleFunc("POST /api/projects", s.wsGuard(s.handleSaveProject))
+	mux.HandleFunc("POST /api/projects", s.writeGuard(s.handleSaveProject))
 	mux.HandleFunc("GET /api/projects/{id}", s.wsGuard(s.handleGetProject))
-	mux.HandleFunc("PATCH /api/projects/{id}", s.wsGuard(s.handleUpdateProject))
-	mux.HandleFunc("POST /api/projects/{id}/archive", s.wsGuard(s.handleArchiveProject))
-	mux.HandleFunc("POST /api/projects/{id}/unarchive", s.wsGuard(s.handleUnarchiveProject))
-	mux.HandleFunc("DELETE /api/projects/{id}", s.wsGuard(s.handleDeleteProject))
+	mux.HandleFunc("PATCH /api/projects/{id}", s.writeGuard(s.handleUpdateProject))
+	mux.HandleFunc("POST /api/projects/{id}/archive", s.writeGuard(s.handleArchiveProject))
+	mux.HandleFunc("POST /api/projects/{id}/unarchive", s.writeGuard(s.handleUnarchiveProject))
+	mux.HandleFunc("DELETE /api/projects/{id}", s.writeGuard(s.handleDeleteProject))
 
 	// Issues.
 	mux.HandleFunc("GET /api/issues/missing-docs", s.wsGuard(s.handleMissingDocs))
 	mux.HandleFunc("GET /api/issues", s.wsGuard(s.handleListIssues))
-	mux.HandleFunc("POST /api/issues", s.wsGuard(s.handleCreateIssue))
+	mux.HandleFunc("POST /api/issues", s.writeGuard(s.handleCreateIssue))
 	mux.HandleFunc("GET /api/issues/{id}", s.wsGuard(s.handleGetIssue))
-	mux.HandleFunc("PATCH /api/issues/{id}", s.wsGuard(s.handleUpdateIssue))
-	mux.HandleFunc("POST /api/issues/{id}/move", s.wsGuard(s.handleMoveIssue))
-	mux.HandleFunc("DELETE /api/issues/{id}", s.wsGuard(s.handleDeleteIssue))
+	mux.HandleFunc("PATCH /api/issues/{id}", s.writeGuard(s.handleUpdateIssue))
+	mux.HandleFunc("POST /api/issues/{id}/move", s.writeGuard(s.handleMoveIssue))
+	mux.HandleFunc("DELETE /api/issues/{id}", s.writeGuard(s.handleDeleteIssue))
 	mux.HandleFunc("GET /api/issues/{id}/activity", s.wsGuard(s.handleIssueActivity))
 	mux.HandleFunc("GET /api/activity", s.wsGuard(s.handleActivity))
 
@@ -250,32 +264,32 @@ func (s *Server) Handler() http.Handler {
 
 	// dev links (branch / PR / commits) + done-when criteria
 	mux.HandleFunc("GET /api/issues/{id}/commits", s.wsGuard(s.handleListCommits))
-	mux.HandleFunc("POST /api/issues/{id}/commits", s.wsGuard(s.handleAddCommit))
+	mux.HandleFunc("POST /api/issues/{id}/commits", s.writeGuard(s.handleAddCommit))
 	// Reverse lookup: which issue owns this commit, and what was it meant
 	// to satisfy. The seam for code-intelligence tooling — see dev.go.
 	mux.HandleFunc("GET /api/commits/{sha}", s.wsGuard(s.handleIssueByCommit))
-	mux.HandleFunc("PATCH /api/issues/{id}/dev", s.wsGuard(s.handleSetDev))
+	mux.HandleFunc("PATCH /api/issues/{id}/dev", s.writeGuard(s.handleSetDev))
 	mux.HandleFunc("GET /api/issues/{id}/criteria", s.wsGuard(s.handleListCriteria))
-	mux.HandleFunc("POST /api/issues/{id}/criteria", s.wsGuard(s.handleAddCriterion))
-	mux.HandleFunc("PATCH /api/criteria/{id}", s.wsGuard(s.handleUpdateCriterion))
-	mux.HandleFunc("DELETE /api/criteria/{id}", s.wsGuard(s.handleDeleteCriterion))
+	mux.HandleFunc("POST /api/issues/{id}/criteria", s.writeGuard(s.handleAddCriterion))
+	mux.HandleFunc("PATCH /api/criteria/{id}", s.writeGuard(s.handleUpdateCriterion))
+	mux.HandleFunc("DELETE /api/criteria/{id}", s.writeGuard(s.handleDeleteCriterion))
 	mux.HandleFunc("GET /api/issues/{id}/blockers", s.wsGuard(s.handleGetBlockers))
-	mux.HandleFunc("PUT /api/issues/{id}/blockers", s.wsGuard(s.handleSetBlockers))
+	mux.HandleFunc("PUT /api/issues/{id}/blockers", s.writeGuard(s.handleSetBlockers))
 	mux.HandleFunc("GET /api/blockers", s.wsGuard(s.handleListBlockLinks))
 	mux.HandleFunc("GET /api/blocked", s.wsGuard(s.handleListBlocked))
 	mux.HandleFunc("GET /api/views", s.wsGuard(s.handleListViews))
-	mux.HandleFunc("POST /api/views", s.wsGuard(s.handleCreateView))
-	mux.HandleFunc("PATCH /api/views/{id}", s.wsGuard(s.handleUpdateView))
-	mux.HandleFunc("DELETE /api/views/{id}", s.wsGuard(s.handleDeleteView))
+	mux.HandleFunc("POST /api/views", s.writeGuard(s.handleCreateView))
+	mux.HandleFunc("PATCH /api/views/{id}", s.writeGuard(s.handleUpdateView))
+	mux.HandleFunc("DELETE /api/views/{id}", s.writeGuard(s.handleDeleteView))
 	mux.HandleFunc("GET /api/issues/{id}/comments", s.wsGuard(s.handleListComments))
 	mux.HandleFunc("POST /api/issues/{id}/comments", s.wsGuard(s.handleAddComment))
 
 	// Documents.
 	mux.HandleFunc("GET /api/documents", s.wsGuard(s.handleListDocuments))
-	mux.HandleFunc("POST /api/documents", s.wsGuard(s.handleSaveDocument))
+	mux.HandleFunc("POST /api/documents", s.writeGuard(s.handleSaveDocument))
 	mux.HandleFunc("GET /api/documents/{id}", s.wsGuard(s.handleGetDocument))
-	mux.HandleFunc("PATCH /api/documents/{id}", s.wsGuard(s.handleUpdateDocument))
-	mux.HandleFunc("DELETE /api/documents/{id}", s.wsGuard(s.handleDeleteDocument))
+	mux.HandleFunc("PATCH /api/documents/{id}", s.writeGuard(s.handleUpdateDocument))
+	mux.HandleFunc("DELETE /api/documents/{id}", s.writeGuard(s.handleDeleteDocument))
 
 	// Push.
 	// bulk import (external tracker → DoneWhen)

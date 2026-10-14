@@ -28,7 +28,7 @@ func (d *deps) registerDev(s *server.MCPServer) {
 		mcp.WithString("url", mcp.Description("Full commit URL; omit to auto-build from the project repo")),
 		wsArg(),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		wsID, err := d.scopeOne(ctx, req, issueRef(req.GetString("issue", "")))
+		wsID, err := d.scopeWriteOne(ctx, req, issueRef(req.GetString("issue", "")))
 		if err != nil {
 			return toolErr(err), nil
 		}
@@ -74,7 +74,7 @@ func (d *deps) registerDev(s *server.MCPServer) {
 		mcp.WithString("prUrl", mcp.Description("Pull request URL")),
 		wsArg(),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		wsID, err := d.scopeOne(ctx, req, issueRef(req.GetString("issue", "")))
+		wsID, err := d.scopeWriteOne(ctx, req, issueRef(req.GetString("issue", "")))
 		if err != nil {
 			return toolErr(err), nil
 		}
@@ -152,7 +152,7 @@ func (d *deps) registerDev(s *server.MCPServer) {
 			})),
 		wsArg(),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		wsID, err := d.scopeOne(ctx, req, issueRef(req.GetString("issue", "")))
+		wsID, err := d.scopeWriteOne(ctx, req, issueRef(req.GetString("issue", "")))
 		if err != nil {
 			return toolErr(err), nil
 		}
@@ -188,7 +188,7 @@ func (d *deps) registerDev(s *server.MCPServer) {
 			"or artifact path. Recorded alongside the tick so the record shows why it passed, not just that it did.")),
 		wsArg(),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		wsID, err := d.scopeOne(ctx, req, issueRef(req.GetString("issue", "")))
+		wsID, err := d.scopeWriteOne(ctx, req, issueRef(req.GetString("issue", "")))
 		if err != nil {
 			return toolErr(err), nil
 		}

@@ -46,7 +46,7 @@ func (d *deps) registerMeta(s *server.MCPServer) {
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		wsID, err := d.scopeOne(ctx, req, projectRef(id))
+		wsID, err := d.scopeWriteOne(ctx, req, projectRef(id))
 		if err != nil {
 			return toolErr(err), nil
 		}
@@ -89,7 +89,7 @@ func (d *deps) registerMeta(s *server.MCPServer) {
 		mcp.WithNumber("position", mcp.Description("Sort position")),
 		wsArg(),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		wsID, err := d.scopeOne(ctx, req, projectRef(req.GetString("id", "")), iniRef(req.GetString("initiative", "")))
+		wsID, err := d.scopeWriteOne(ctx, req, projectRef(req.GetString("id", "")), iniRef(req.GetString("initiative", "")))
 		if err != nil {
 			return toolErr(err), nil
 		}
@@ -170,7 +170,7 @@ func (d *deps) registerMeta(s *server.MCPServer) {
 		mcp.WithNumber("position", mcp.Description("Sort position")),
 		wsArg(),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		wsID, err := d.scopeOne(ctx, req, iniRef(req.GetString("id", "")))
+		wsID, err := d.scopeWriteOne(ctx, req, iniRef(req.GetString("id", "")))
 		if err != nil {
 			return toolErr(err), nil
 		}
@@ -266,7 +266,7 @@ func (d *deps) registerMeta(s *server.MCPServer) {
 		mcp.WithString("group", mcp.Description("Group name, e.g. 'domain'")),
 		wsArg(),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		wsID, err := d.scopeOne(ctx, req)
+		wsID, err := d.scopeWriteOne(ctx, req)
 		if err != nil {
 			return toolErr(err), nil
 		}

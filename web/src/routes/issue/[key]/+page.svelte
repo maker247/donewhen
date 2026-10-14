@@ -198,8 +198,62 @@
 		loadSecondary(issue, seq);
 	}
 
-	onMount(() =>
-		onLive((ev) => {
+	let chatWidth = $state(420);
+	let isResizing = $state(false);
+
+	function startResize(e) {
+		if (e.button !== 0 && e.type.startsWith('mouse')) return;
+		e.preventDefault();
+		isResizing = true;
+		const startX = e.clientX;
+		const startWidth = chatWidth;
+		const target = e.currentTarget;
+
+		try {
+			if (target?.setPointerCapture && e.pointerId !== undefined) {
+				target.setPointerCapture(e.pointerId);
+			}
+		} catch {}
+
+		function onMove(moveEvent) {
+			const delta = startX - moveEvent.clientX;
+			const maxW = Math.max(300, Math.floor(window.innerWidth * 0.7));
+			const newWidth = Math.max(280, Math.min(maxW, startWidth + delta));
+			chatWidth = newWidth;
+		}
+
+		function onUp(upEvent) {
+			isResizing = false;
+			try {
+				if (target?.releasePointerCapture && upEvent?.pointerId !== undefined) {
+					target.releasePointerCapture(upEvent.pointerId);
+				}
+			} catch {}
+			window.removeEventListener('pointermove', onMove);
+			window.removeEventListener('pointerup', onUp);
+			window.removeEventListener('mousemove', onMove);
+			window.removeEventListener('mouseup', onUp);
+			try {
+				localStorage.setItem('donewhen.chatWidth', String(chatWidth));
+			} catch {}
+		}
+
+		window.addEventListener('pointermove', onMove);
+		window.addEventListener('pointerup', onUp);
+		window.addEventListener('mousemove', onMove);
+		window.addEventListener('mouseup', onUp);
+	}
+
+	onMount(() => {
+		try {
+			const saved = localStorage.getItem('donewhen.chatWidth');
+			if (saved) {
+				const w = parseInt(saved, 10);
+				if (!isNaN(w) && w >= 280 && w <= 1200) chatWidth = w;
+			}
+		} catch {}
+
+		return onLive((ev) => {
 			const id = ev.issue?.id || ev.issueId;
 			if (!issue || id !== issue.id) return;
 			if (ev.type === 'issue.deleted') {
@@ -208,14 +262,16 @@
 				return;
 			}
 			if (ev.type === 'issue.updated' || ev.type === 'issue.state_changed') refreshIssue();
-		})
-	);
+		});
+	});
 
 	// A move the done-when gate refused: shown inline with the open items. An
 	// owner/admin may push it through; the server records the override.
 	let gateBlock = $state(null);
 	const canForce = $derived(['owner', 'admin'].includes($activeWorkspace?.role));
+	const canWrite = $derived(['owner', 'admin', 'member'].includes($activeWorkspace?.role));
 	async function patch(body) {
+		if (!canWrite) return;
 		if (body.stateId && !body.blockedReason) {
 			const reason = await blockedReasonFor(issue.stateId, body.stateId, issue.key);
 			if (reason === null) return;
@@ -248,6 +304,7 @@
 		return true;
 	}
 	function startEditTitle() {
+		if (!canWrite) return;
 		editingTitle = true;
 		titleEditBase = issue.updatedAt;
 	}
@@ -307,6 +364,7 @@
 	}
 
 	function startEditDesc() {
+		if (!canWrite) return;
 		descDraft = issue.descriptionMd || '';
 		descEditBase = issue.updatedAt;
 		descSaveState = 'idle';
@@ -379,7 +437,7 @@
 		node.focus();
 	}
 	async function addCrit() {
-		if (!newCrit.trim()) return;
+		if (!canWrite || !newCrit.trim()) return;
 		try {
 			const c = await api.addCriterion(issue.id, newCrit.trim());
 			criteria = [...criteria, c];
@@ -389,6 +447,7 @@
 		}
 	}
 	async function toggleCrit(c) {
+		if (!canWrite) return;
 		try {
 			const u = await api.updateCriterion(c.id, { done: !c.done });
 			criteria = criteria.map((x) => (x.id === c.id ? u : x));
@@ -397,6 +456,7 @@
 		}
 	}
 	async function delCrit(c) {
+		if (!canWrite) return;
 		try {
 			await api.deleteCriterion(c.id);
 			criteria = criteria.filter((x) => x.id !== c.id);
@@ -498,8 +558,19 @@
 				{ label: issue.key, upper: false }
 			]}
 		>
-			<button class="btn danger sm" bind:this={delBtnEl} onclick={del}>{confirmDel ? 'Confirm delete' : 'Delete'}</button>
+			{#if canWrite}
+				<button class="btn danger sm" bind:this={delBtnEl} onclick={del}>{confirmDel ? 'Confirm delete' : 'Delete'}</button>
+			{:else}
+				<span class="pill">viewer · read only</span>
+			{/if}
 		</PageHeader>
+
+		{#if !canWrite}
+			<div class="banner" style="background: var(--surface); border: 1px solid var(--line); color: var(--ink-2); margin-bottom: 12px;" role="status">
+				<span class="bic">👁</span>
+				<span class="btext"><b>Viewer mode:</b> You have read-only access. You can review tasks & artifacts, and post comments on the right.</span>
+			</div>
+		{/if}
 
 		{#if archivedEpic}
 			<div class="banner warn" role="status">
@@ -567,7 +638,7 @@
 			</button>
 		</div>
 
-		<div class="dbody" data-pane={pane}>
+		<div class="dbody" data-pane={pane} class:resizing={isResizing}>
 			<main class="dmain">
 				<div class="dmain-inner">
 					{#if parent}
@@ -581,6 +652,7 @@
 						class="textarea title-input"
 						bind:value={titleDraft}
 						rows="1"
+						readonly={!canWrite}
 						onfocus={startEditTitle}
 						onblur={saveTitle}
 						onkeydown={titleKeydown}
@@ -611,7 +683,7 @@
 								{/if}
 								<button class="btn ghost sm" onclick={cancelEditDesc}>Cancel</button>
 								<button class="btn primary sm" onclick={saveDesc} disabled={savingDesc}>Save</button>
-							{:else}
+							{:else if canWrite}
 								{#if justSavedDesc}<span class="saved">✓ Saved just now</span>{/if}
 								<button class="btn sd sm" onclick={startEditDesc}>Edit</button>
 							{/if}
@@ -646,21 +718,23 @@
 						{/if}
 						{#each criteria as c (c.id)}
 							<div class="crit">
-								<button class="crit-box" class:on={c.done} onclick={() => toggleCrit(c)} aria-label="toggle">
+								<button class="crit-box" class:on={c.done} disabled={!canWrite} onclick={() => toggleCrit(c)} aria-label="toggle">
 									{#if c.done}<Tick size={12} />{/if}
 								</button>
 								<span class="crit-text" class:done={c.done}><InlineCode text={c.body} /></span>
 								<span class="crit-kind" class:adv={c.kind === 'judgment'}>{c.kind}</span>
 								{#if c.evidenceRef}<span class="crit-ev" title={c.evidenceRef}>{c.evidenceRef}</span>{/if}
-								<button class="crit-del" onclick={() => delCrit(c)} title="Remove">✕</button>
+								{#if canWrite}<button class="crit-del" onclick={() => delCrit(c)} title="Remove">✕</button>{/if}
 							</div>
 						{/each}
-						<input
-							class="input crit-add"
-							bind:value={newCrit}
-							placeholder="Add acceptance criterion…"
-							onkeydown={(e) => e.key === 'Enter' && addCrit()}
-						/>
+						{#if canWrite}
+							<input
+								class="input crit-add"
+								bind:value={newCrit}
+								placeholder="Add acceptance criterion…"
+								onkeydown={(e) => e.key === 'Enter' && addCrit()}
+							/>
+						{/if}
 					</section>
 
 					{#if issue.gitBranch || issue.prUrl || commits.length}
@@ -708,7 +782,19 @@
 				</div>
 			</main>
 
-			<aside class="chat">
+			<div
+				class="chat-resizer"
+				role="separator"
+				aria-orientation="vertical"
+				aria-label="Resize comment section"
+				tabindex="0"
+				onpointerdown={startResize}
+				onmousedown={startResize}
+			>
+				<div class="chat-resizer-line"></div>
+			</div>
+
+			<aside class="chat" style="width: {chatWidth}px; flex: 0 0 {chatWidth}px;">
 				{#key issue.id}<IssueTimeline {issue} />{/key}
 			</aside>
 		</div>
@@ -759,12 +845,46 @@
 	}
 	/* Comments, side by side with the task. */
 	.chat {
-		flex: 0 0 min(400px, 42%);
-		min-width: 0;
+		min-width: 280px;
+		max-width: 80vw;
 		border-left: 1px solid var(--line);
 		display: flex;
 		flex-direction: column;
 		background: var(--paper);
+	}
+	.chat-resizer {
+		width: 14px;
+		margin: 0 -7px;
+		cursor: col-resize;
+		flex: 0 0 14px;
+		position: relative;
+		z-index: 20;
+		background: transparent;
+		touch-action: none;
+		user-select: none;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.chat-resizer-line {
+		width: 2px;
+		height: 100%;
+		background: var(--line);
+		transition: background 0.15s ease, width 0.15s ease;
+		pointer-events: none;
+	}
+	.chat-resizer:hover .chat-resizer-line,
+	.chat-resizer:active .chat-resizer-line,
+	.dbody.resizing .chat-resizer-line {
+		background: var(--accent);
+		width: 4px;
+	}
+	.dbody.resizing {
+		user-select: none;
+		cursor: col-resize;
+	}
+	.dbody.resizing * {
+		cursor: col-resize !important;
 	}
 
 	/* Properties: one vertical panel — every field a row, dashed dividers. */
@@ -1371,8 +1491,14 @@
 			color: var(--ink);
 			border-bottom-color: var(--accent);
 		}
+		.chat-resizer {
+			display: none;
+		}
 		.chat {
 			flex: 1 1 auto;
+			width: 100% !important;
+			max-width: none;
+			min-width: 0;
 			border-left: none;
 		}
 		.dbody[data-pane='task'] .chat,

@@ -45,6 +45,7 @@ func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 		InitiativeID: q.Get("initiative"),
 		ProjectID:    q.Get("project"),
 		Actor:        q.Get("actor"),
+		Kind:         q.Get("kind"),
 		Limit:        limit,
 	})
 	if handleStoreErr(w, err) {

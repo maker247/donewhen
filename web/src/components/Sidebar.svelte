@@ -17,13 +17,15 @@
 		applyFilterQuery,
 		inboxCount,
 		refreshInbox,
+		unreadNotificationsCount,
+		refreshNotifications,
 		activeWorkspace,
 		me
 	} from '$lib/store.js';
 	import { paletteOpen, openComposer, askArchive, streamStatus, showToast } from '$lib/ui.js';
 	import WorkspaceMenu from './WorkspaceMenu.svelte';
 	import {
-		FileText, Box, Plus, Archive, Search, Pencil, History, Inbox, Columns3, List, Layers, GitFork,
+		FileText, Box, Plus, Archive, Search, Pencil, History, Inbox, Bell, Columns3, List, Layers, GitFork,
 		ChevronsUpDown, Settings, LogOut, ChevronRight, ChevronLeft, OctagonX, Bookmark, X
 	} from '@lucide/svelte';
 	import { parseFilters, serializeFilters } from '$lib/filters.js';
@@ -122,9 +124,8 @@
 	// Per-epic totals come from the store's unfiltered list, which live events
 	// keep current; moving a card never refetches anything here.
 	onMount(() => {
-		refreshInbox().catch(() => {
-			/* not logged in yet / offline — leave badge as-is */
-		});
+		refreshInbox().catch(() => {});
+		refreshNotifications().catch(() => {});
 	});
 
 	// Edit / delete an Epic (DoneWhen "project").
@@ -229,6 +230,22 @@
 				{#if collapsed && $inboxCount > 0}<span class="dotbadge"></span>{/if}
 			</span><span class="lbl">Inbox</span>
 			{#if !collapsed && $inboxCount > 0}<span class="badge">{$inboxCount}</span>{/if}
+		</a>
+		<a
+			href="/notifications"
+			class="nav-item"
+			class:active={$page.url.pathname === '/notifications'}
+			onclick={onnavigate}
+			title="Notifications"
+			aria-label="Notifications"
+		>
+			<span class="icon" style="position:relative">
+				<Bell size={16} strokeWidth={2} />
+				{#if collapsed && $unreadNotificationsCount > 0}<span class="dotbadge"></span>{/if}
+			</span><span class="lbl">Notifications</span>
+			{#if !collapsed && $unreadNotificationsCount > 0}
+				<span class="badge">{$unreadNotificationsCount > 9 ? '9+' : $unreadNotificationsCount}</span>
+			{/if}
 		</a>
 	</div>
 

@@ -346,3 +346,81 @@ func TestCrossWorkspaceAccessIs404(t *testing.T) {
 		t.Fatalf("bob lost his project: %d", w.Code)
 	}
 }
+
+func TestViewerPermissions(t *testing.T) {
+	e := newEnv(t, config.Config{})
+	owner, _ := e.user("")
+	viewer, _ := e.user("")
+	wsp := e.workspace(owner)
+	ctx := context.Background()
+	if err := e.store.AddMember(ctx, wsp.ID, viewer, models.RoleViewer); err != nil {
+		t.Fatal(err)
+	}
+	ownerB := browser(e.session(owner))
+	viewerB := browser(e.session(viewer))
+	ws := header("X-Workspace", wsp.ID)
+
+	// Owner creates an issue, criterion, and project.
+	w := e.do("POST", "/api/issues", map[string]any{"title": "viewer test task"}, ownerB, ws)
+	if w.Code != 201 {
+		t.Fatalf("create issue: %d %s", w.Code, w.Body.String())
+	}
+	issueID := idOf(t, w.Body.Bytes())
+	w = e.do("POST", "/api/issues/"+issueID+"/criteria", map[string]any{"body": "c1"}, ownerB, ws)
+	if w.Code != 201 {
+		t.Fatalf("create criterion: %d %s", w.Code, w.Body.String())
+	}
+	critID := idOf(t, w.Body.Bytes())
+	w = e.do("POST", "/api/projects", map[string]any{"name": "p1"}, ownerB, ws)
+	if w.Code != 200 {
+		t.Fatalf("create project: %d %s", w.Code, w.Body.String())
+	}
+
+	// 1. Viewer READ operations MUST succeed (200 OK).
+	readRoutes := []string{
+		"/api/issues",
+		"/api/issues/" + issueID,
+		"/api/issues/" + issueID + "/criteria",
+		"/api/projects",
+		"/api/documents",
+	}
+	for _, path := range readRoutes {
+		w := e.do("GET", path, nil, viewerB, ws)
+		if w.Code != http.StatusOK {
+			t.Fatalf("viewer GET %s = %d %s, want 200", path, w.Code, w.Body.String())
+		}
+	}
+
+	// 2. Viewer COMMENT operation MUST succeed (viewers can comment on tasks).
+	w = e.do("POST", "/api/issues/"+issueID+"/comments", map[string]any{"bodyMd": "looks good to me"}, viewerB, ws)
+	if w.Code != http.StatusCreated && w.Code != http.StatusOK {
+		t.Fatalf("viewer POST comment = %d %s, want 200 or 201", w.Code, w.Body.String())
+	}
+
+	// 3. Viewer MUTATING operations MUST be refused with 403.
+	type route struct {
+		method, path string
+		body         any
+	}
+	writeRoutes := []route{
+		{"POST", "/api/issues", map[string]any{"title": "viewer created"}},
+		{"PATCH", "/api/issues/" + issueID, map[string]any{"title": "viewer hacked"}},
+		{"DELETE", "/api/issues/" + issueID, nil},
+		{"POST", "/api/issues/" + issueID + "/move", map[string]any{"stateId": "done"}},
+		{"POST", "/api/issues/" + issueID + "/criteria", map[string]any{"body": "c2"}},
+		{"PATCH", "/api/criteria/" + critID, map[string]any{"done": true}},
+		{"DELETE", "/api/criteria/" + critID, nil},
+		{"POST", "/api/projects", map[string]any{"name": "p2"}},
+		{"POST", "/api/initiatives", map[string]any{"name": "i1"}},
+		{"POST", "/api/documents", map[string]any{"title": "d1", "bodyMd": "doc content"}},
+	}
+	for _, rt := range writeRoutes {
+		t.Run("viewer_refused_"+rt.method+"_"+rt.path, func(t *testing.T) {
+			w := e.do(rt.method, rt.path, rt.body, viewerB, ws)
+			if w.Code != http.StatusForbidden {
+				t.Fatalf("viewer %s %s = %d %s, want 403 Forbidden", rt.method, rt.path, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+

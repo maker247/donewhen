@@ -200,6 +200,26 @@ func (d *deps) scopeOne(ctx context.Context, req mcp.CallToolRequest, refs ...re
 	}
 }
 
+// scopeWriteOne is scopeOne plus write-permission enforcement: viewers may not mutate workspace data.
+func (d *deps) scopeWriteOne(ctx context.Context, req mcp.CallToolRequest, refs ...ref) (string, error) {
+	wsID, err := d.scopeOne(ctx, req, refs...)
+	if err != nil {
+		return "", err
+	}
+	user, err := d.caller(ctx)
+	if err != nil {
+		return "", err
+	}
+	role, err := d.store.RoleIn(ctx, wsID, user.ID)
+	if err != nil {
+		return "", err
+	}
+	if !models.CanWrite(role) {
+		return "", errors.New("read-only access: viewer role cannot modify workspace content")
+	}
+	return wsID, nil
+}
+
 // ticketFormat is how every ticket is written, so a product owner and the
 // agent that builds it can both read it. It travels with the server, so any
 // client writing tickets here gets it without its own setup.
@@ -478,7 +498,7 @@ func (d *deps) register(s *server.MCPServer) {
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		wsID, err := d.scopeOne(ctx, req, issueRef(ref2))
+		wsID, err := d.scopeWriteOne(ctx, req, issueRef(ref2))
 		if err != nil {
 			return toolErr(err), nil
 		}
@@ -627,7 +647,7 @@ func (d *deps) handleSaveIssue(ctx context.Context, req mcp.CallToolRequest) (*m
 	labels := stringSlice(req, "labels")
 	// Updating? the issue says which workspace. Creating into an epic? the epic
 	// says. Creating bare is the one case with nothing to infer from.
-	wsID, err := d.scopeOne(ctx, req, issueRef(id), projectRef(req.GetString("project", "")))
+	wsID, err := d.scopeWriteOne(ctx, req, issueRef(id), projectRef(req.GetString("project", "")))
 	if err != nil {
 		return toolErr(err), nil
 	}

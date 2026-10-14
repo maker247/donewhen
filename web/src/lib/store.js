@@ -77,6 +77,164 @@ export async function refreshInbox() {
 	if (gen === wsGen) inboxCount.set(inboxTotal(r));
 	return r;
 }
+
+// Notifications: recent task comments in the active workspace
+export const notifications = writable([]);
+export const unreadNotificationsCount = writable(0);
+
+function getReadIds(wsId) {
+	if (!wsId) return new Set();
+	try {
+		const raw = localStorage.getItem(`donewhen.readIds.${wsId}`);
+		return new Set(raw ? JSON.parse(raw) : []);
+	} catch {
+		return new Set();
+	}
+}
+
+function computeUnread(list, wsId) {
+	if (!wsId) return;
+	let lastSeen = null;
+	try {
+		lastSeen = localStorage.getItem(`donewhen.commentsSeen.${wsId}`);
+	} catch {}
+	const seenTime = lastSeen ? new Date(lastSeen).getTime() : 0;
+	const readIds = getReadIds(wsId);
+	const unread = list.filter((a) => {
+		if (readIds.has(a.id)) return false;
+		if (seenTime && new Date(a.createdAt).getTime() <= seenTime) return false;
+		return true;
+	}).length;
+	unreadNotificationsCount.set(unread);
+}
+
+export function isNotificationUnread(item, wsId) {
+	if (!wsId || !item) return true;
+	const readIds = getReadIds(wsId);
+	if (readIds.has(item.id)) return false;
+	let lastSeen = null;
+	try {
+		lastSeen = localStorage.getItem(`donewhen.commentsSeen.${wsId}`);
+	} catch {}
+	if (!lastSeen) return true;
+	return new Date(item.createdAt).getTime() > new Date(lastSeen).getTime();
+}
+
+export async function refreshNotifications() {
+	const ws = get(activeWorkspace);
+	if (!ws) return [];
+	const gen = wsGen;
+	try {
+		const list = await api.activity({ kind: 'commented,artifact_written,created,state_changed', limit: 200 });
+		if (gen === wsGen) {
+			notifications.set(list || []);
+			computeUnread(list || [], ws.id);
+		}
+		return list || [];
+	} catch {
+		return [];
+	}
+}
+
+export function markNotificationItemRead(id) {
+	const ws = get(activeWorkspace);
+	if (!ws || !id) return;
+	try {
+		const readIds = getReadIds(ws.id);
+		readIds.add(id);
+		localStorage.setItem(`donewhen.readIds.${ws.id}`, JSON.stringify([...readIds]));
+	} catch {}
+	computeUnread(get(notifications), ws.id);
+}
+
+export function markNotificationsRead() {
+	const ws = get(activeWorkspace);
+	if (!ws) return;
+	try {
+		localStorage.setItem(`donewhen.commentsSeen.${ws.id}`, new Date().toISOString());
+		localStorage.removeItem(`donewhen.readIds.${ws.id}`);
+	} catch {}
+	unreadNotificationsCount.set(0);
+}
+
+export function handleCommentEvent(ev) {
+	if (!ev || ev.type !== 'comment.added') return;
+	const ws = get(activeWorkspace);
+	if (!ws || (ev.workspaceId && ev.workspaceId !== ws.id)) return;
+	const newAct = {
+		id: ev.comment?.id || String(Date.now()),
+		issueId: ev.issue?.id,
+		issueKey: ev.issue?.key,
+		issueTitle: ev.issue?.title,
+		actor: ev.actor || ev.comment?.actor || 'human',
+		kind: 'commented',
+		detail: ev.comment?.bodyMd?.slice(0, 100) || '',
+		createdAt: ev.comment?.createdAt || new Date().toISOString()
+	};
+	notifications.update((l) => [newAct, ...l.filter((x) => x.id !== newAct.id)]);
+	unreadNotificationsCount.update((n) => n + 1);
+}
+
+export function handleDocumentEvent(ev) {
+	if (!ev || ev.type !== 'document.saved' || !ev.document) return;
+	const ws = get(activeWorkspace);
+	if (!ws || (ev.workspaceId && ev.workspaceId !== ws.id)) return;
+	const d = ev.document;
+	const newAct = {
+		id: 'doc-' + d.id,
+		issueId: d.issueId || null,
+		issueKey: '',
+		issueTitle: '',
+		docId: d.id,
+		docType: d.type || 'change',
+		actor: ev.actor || d.author || 'ai',
+		kind: 'artifact_written',
+		detail: d.title || 'Untitled document',
+		createdAt: d.createdAt || d.updatedAt || new Date().toISOString()
+	};
+	notifications.update((l) => [newAct, ...l.filter((x) => x.id !== newAct.id && x.docId !== d.id)]);
+	unreadNotificationsCount.update((n) => n + 1);
+}
+
+export function handleIssueCreatedEvent(ev) {
+	if (!ev || ev.type !== 'issue.created' || !ev.issue) return;
+	const ws = get(activeWorkspace);
+	if (!ws || (ev.workspaceId && ev.workspaceId !== ws.id)) return;
+	const newAct = {
+		id: 'issue-created-' + ev.issue.id,
+		issueId: ev.issue.id,
+		issueKey: ev.issue.key,
+		issueTitle: ev.issue.title,
+		actor: ev.actor || 'ai',
+		kind: 'created',
+		detail: 'Created task ' + ev.issue.key,
+		createdAt: ev.issue.createdAt || new Date().toISOString()
+	};
+	notifications.update((l) => [newAct, ...l.filter((x) => x.id !== newAct.id)]);
+	unreadNotificationsCount.update((n) => n + 1);
+}
+
+export function handleIssueStateChangedEvent(ev) {
+	if (!ev || ev.type !== 'issue.state_changed' || !ev.issue) return;
+	const ws = get(activeWorkspace);
+	if (!ws || (ev.workspaceId && ev.workspaceId !== ws.id)) return;
+	const toState = ev.to?.name || 'new state';
+	const newAct = {
+		id: 'state-' + ev.issue.id + '-' + Date.now(),
+		issueId: ev.issue.id,
+		issueKey: ev.issue.key,
+		issueTitle: ev.issue.title,
+		actor: ev.actor || 'ai',
+		kind: 'state_changed',
+		fromVal: ev.from?.name || '',
+		toVal: toState,
+		detail: `Moved to ${toState}`,
+		createdAt: new Date().toISOString()
+	};
+	notifications.update((l) => [newAct, ...l.filter((x) => x.id !== newAct.id)]);
+	unreadNotificationsCount.update((n) => n + 1);
+}
+
 export const issueQuery = writable(''); // the search box above every issue view
 
 // workspaceCounts mirrors inboxCount but for every membership at once, keyed
@@ -189,6 +347,7 @@ export async function switchWorkspace(slug) {
 		if (gen === wsGen) {
 			refreshInbox().catch(() => {});
 			loadViews();
+			refreshNotifications().catch(() => {});
 		}
 	} catch (e) {
 		if (gen === wsGen && e?.status !== 401) notify("Couldn't load the workspace: " + (e?.message || e));
@@ -269,7 +428,8 @@ export const catchUp = coalesce(async () => {
 		loadIssues(true),
 		loadBlockLinks(),
 		refreshInbox().catch(() => {}),
-		loadWorkspaceCounts()
+		loadWorkspaceCounts(),
+		refreshNotifications().catch(() => {})
 	]);
 });
 
@@ -284,7 +444,13 @@ export function applyEvent(ev) {
 	// A ticket moving can free (or re-block) the tickets it blocks, and can
 	// change what is waiting on the user.
 	if (ev.type === 'issue.blockers' || ev.type === 'issue.state_changed') loadBlockLinks();
-	if (ev.type === 'issue.state_changed') scheduleInboxRefresh();
+	if (ev.type === 'issue.state_changed') {
+		scheduleInboxRefresh();
+		handleIssueStateChangedEvent(ev);
+	}
+	if (ev.type === 'issue.created') handleIssueCreatedEvent(ev);
+	if (ev.type === 'comment.added') handleCommentEvent(ev);
+	if (ev.type === 'document.saved') handleDocumentEvent(ev);
 	const id = ev.issue?.id || ev.issueId;
 	if (id && movingIds.has(id)) return;
 	if (ev.type === 'issue.deleted') {

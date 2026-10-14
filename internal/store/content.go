@@ -251,19 +251,18 @@ func (s *Store) CreateDocument(ctx context.Context, wsID string, d models.Docume
 	if err := s.setDocLabelsTx(ctx, tx, wsID, d.ID, labels); err != nil {
 		return d, err
 	}
-	// Timeline: an artifact was written for this issue.
+	// Timeline: an artifact was written.
+	var issueKey, issueTitle string
 	if d.IssueID != nil && *d.IssueID != "" {
-		is, err := s.getIssueTx(ctx, tx, wsID, *d.IssueID, false)
-		if err != nil {
-			return d, err
-		}
-		if err := insertActivity(ctx, tx, wsID, models.Activity{
-			IssueID: d.IssueID, IssueKey: is.Key, IssueTitle: is.Title,
-			Actor: d.Author, Kind: "artifact_written", Detail: d.Title,
-		}); err != nil {
-			return d, err
+		if is, err := s.getIssueTx(ctx, tx, wsID, *d.IssueID, false); err == nil {
+			issueKey = is.Key
+			issueTitle = is.Title
 		}
 	}
+	_ = insertActivity(ctx, tx, wsID, models.Activity{
+		IssueID: d.IssueID, IssueKey: issueKey, IssueTitle: issueTitle,
+		Actor: d.Author, Kind: "artifact_written", Detail: d.Title,
+	})
 	if err := tx.Commit(ctx); err != nil {
 		return d, err
 	}

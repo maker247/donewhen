@@ -6,8 +6,9 @@
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api.js';
 	import IssuePeek from '$components/IssuePeek.svelte';
-	import { projects, initiatives, issues, labels as allLabels } from '$lib/store.js';
+	import { projects, initiatives, issues, labels as allLabels, activeWorkspace } from '$lib/store.js';
 	import { showToast, onLive, quickCapture } from '$lib/ui.js';
+	const canWrite = $derived(['owner', 'admin', 'member'].includes($activeWorkspace?.role));
 	import Markdown from '$components/Markdown.svelte';
 	import LabelPill from '$components/LabelPill.svelte';
 	import { rel } from '$lib/format.js';
@@ -162,7 +163,7 @@
 	}
 
 	async function persist(extra) {
-		if (!sel) return;
+		if (!sel || !canWrite) return;
 		const prev = sel;
 		try {
 			sel = await api.saveDocument({ id: sel.id, title: sel.title, bodyMd: sel.bodyMd, type: sel.type, ...extra });
@@ -190,7 +191,7 @@
 		persist({ labelIds: ids });
 	}
 	async function del() {
-		if (!sel) return;
+		if (!sel || !canWrite) return;
 		if (!confirmDel) {
 			confirmDel = true;
 			return;
@@ -312,20 +313,24 @@
 			<div class="crumb"><button class="crumb-lnk" onclick={back}>Artifacts</button>{#if sel}<span class="sep">›</span><b>{sel.title}</b>{/if}</div>
 			<span class="rsp"></span>
 			{#if sel}
-				<div class="typewrap">
-					<button class="tchip ghost" onclick={() => (typeOpen = !typeOpen)}>
-						<span style:color={typeMeta(sel.type).color}>{typeMeta(sel.type).icon}</span>{typeMeta(sel.type).label}
-					</button>
-					{#if typeOpen}
-						<button class="bd" aria-label="Close" onclick={() => (typeOpen = false)}></button>
-						<div class="pop">
-							{#each Object.entries(TYPES) as [k, t] (k)}
-								<button class="pi" class:on={sel.type === k} onclick={() => setType(k)}><span style:color={t.color}>{t.icon}</span>{t.label}</button>
-							{/each}
-						</div>
-					{/if}
-				</div>
-				<button class="delbtn" class:danger={confirmDel} onclick={del}>{confirmDel ? 'Confirm delete' : 'Delete'}</button>
+				{#if canWrite}
+					<div class="typewrap">
+						<button class="tchip ghost" onclick={() => (typeOpen = !typeOpen)}>
+							<span style:color={typeMeta(sel.type).color}>{typeMeta(sel.type).icon}</span>{typeMeta(sel.type).label}
+						</button>
+						{#if typeOpen}
+							<button class="bd" aria-label="Close" onclick={() => (typeOpen = false)}></button>
+							<div class="pop">
+								{#each Object.entries(TYPES) as [k, t] (k)}
+									<button class="pi" class:on={sel.type === k} onclick={() => setType(k)}><span style:color={t.color}>{t.icon}</span>{t.label}</button>
+								{/each}
+							</div>
+						{/if}
+					</div>
+					<button class="delbtn" class:danger={confirmDel} onclick={del}>{confirmDel ? 'Confirm delete' : 'Delete'}</button>
+				{:else}
+					<span class="pill">viewer · read only</span>
+				{/if}
 			{/if}
 		</div>
 		<div class="rbody">
@@ -344,9 +349,11 @@
 						</div>
 						{#if sel.labels?.length}
 							<div class="rlabels">
-								{#each sel.labels as l (l.id)}
+								{#if canWrite}
 									<button class="lbtn" onclick={() => toggleLabel(l.id)}><LabelPill label={l} /><span class="x">✕</span></button>
-								{/each}
+								{:else}
+									<span class="lbtn" style="cursor: default;"><LabelPill label={l} /></span>
+								{/if}
 							</div>
 						{/if}
 						<div class="rc"><Markdown source={sel.bodyMd} /></div>

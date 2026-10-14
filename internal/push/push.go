@@ -142,6 +142,16 @@ func (n *Notifier) build(e events.Event, aiName string) (payload, bool) {
 			URL:   n.issueURL(e.Issue),
 			Tag:   e.Issue.ID,
 		}, true
+	case events.DocumentSaved:
+		if e.Document == nil {
+			return payload{}, false
+		}
+		return payload{
+			Title: fmt.Sprintf("Artifact: %s", e.Document.Title),
+			Body:  fmt.Sprintf("New artifact by %s", actor),
+			URL:   fmt.Sprintf("%s/artifacts?doc=%s", n.cfg.BaseURL, e.Document.ID),
+			Tag:   e.Document.ID,
+		}, true
 	}
 	return payload{}, false
 }

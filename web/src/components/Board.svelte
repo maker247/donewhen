@@ -15,6 +15,7 @@
 	let collapsed = $state(new Set());
 	let collapseFor = ''; // workspace id the folds were loaded for
 
+	const canWrite = $derived(['owner', 'admin', 'member'].includes($activeWorkspace?.role));
 	const loading = $derived($states.length === 0);
 	// The whole-board empty state (brand-new workspace) — distinct from a
 	// single empty column, which every column renders on its own below.
@@ -159,7 +160,7 @@
 {:else if isEmptyWorkspace}
 	<div class="empty-board">
 		<div class="eh">Nothing on the board yet.</div>
-		<button class="btn primary" onclick={() => quickCapture.set(true)}>New issue</button>
+		{#if canWrite}<button class="btn primary" onclick={() => quickCapture.set(true)}>New issue</button>{/if}
 	</div>
 {:else}
 	<!-- Desktop: horizontal drag-and-drop columns. The pointer handlers are a
@@ -203,7 +204,7 @@
 					<div class="col-body-wrap">
 						<div
 							class="col-body"
-							use:dndzone={{ items: col.items, flipDurationMs: 150, dropTargetStyle: {}, dragDisabled: !!$issueQuery.trim() }}
+							use:dndzone={{ items: col.items, flipDurationMs: 150, dropTargetStyle: {}, dragDisabled: !!$issueQuery.trim() || !canWrite }}
 							onconsider={(e) => consider(i, e)}
 							onfinalize={(e) => finalize(i, e)}
 						>

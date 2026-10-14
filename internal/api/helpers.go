@@ -121,6 +121,11 @@ func canAdmin(r *http.Request) bool {
 	return models.CanAdmin(auth.RoleFrom(r.Context()))
 }
 
+// canWrite reports whether the caller may create, update or delete workspace content.
+func canWrite(r *http.Request) bool {
+	return models.CanWrite(auth.RoleFrom(r.Context()))
+}
+
 func readJSON(r *http.Request, dst any) error {
 	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 2<<20)) // 2 MiB
 	dec.DisallowUnknownFields()

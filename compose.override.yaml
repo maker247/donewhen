@@ -1,0 +1,12 @@
+services:
+  db:
+    image: postgres:18-alpine
+    profiles:
+      - disabled
+  donewhen:
+    depends_on:
+      db:
+        condition: service_started
+        required: false
+    environment:
+      DONEWHEN_DATABASE_URL: postgres://postgres.jzpwyvzpmvyeudqeonkr:%40chikton334dev@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require

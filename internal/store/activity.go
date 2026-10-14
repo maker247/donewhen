@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -61,6 +62,7 @@ type ActivityFilter struct {
 	InitiativeID string
 	ProjectID    string
 	Actor        string // human | ai
+	Kind         string // commented | state_changed | ...
 	Limit        int
 }
 
@@ -76,6 +78,17 @@ func (s *Store) ListRecentActivity(ctx context.Context, f ActivityFilter) ([]mod
 		n++
 		q += fmt.Sprintf(" AND a.actor=$%d", n)
 		args = append(args, f.Actor)
+	}
+	if f.Kind != "" {
+		n++
+		kinds := strings.Split(f.Kind, ",")
+		if len(kinds) == 1 {
+			q += fmt.Sprintf(" AND a.kind=$%d", n)
+			args = append(args, kinds[0])
+		} else {
+			q += fmt.Sprintf(" AND a.kind = ANY($%d)", n)
+			args = append(args, kinds)
+		}
 	}
 	if f.InitiativeID != "" {
 		n++

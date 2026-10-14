@@ -155,7 +155,7 @@ func (d *deps) registerContent(s *server.MCPServer) {
 			mcp.Items(map[string]any{"type": "string"})),
 		wsArg(),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		wsID, err := d.scopeOne(ctx, req, documentRef(req.GetString("id", "")), issueRef(req.GetString("issue", "")),
+		wsID, err := d.scopeWriteOne(ctx, req, documentRef(req.GetString("id", "")), issueRef(req.GetString("issue", "")),
 			projectRef(req.GetString("project", "")), iniRef(req.GetString("initiative", "")))
 		if err != nil {
 			return toolErr(err), nil

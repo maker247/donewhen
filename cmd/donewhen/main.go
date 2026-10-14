@@ -89,7 +89,7 @@ usage:
 
   donewhen workspace list                      show workspaces + member counts
   donewhen workspace create <name> <prefix>    create a workspace
-  donewhen workspace add <slug> <email> [role] grant a user access (owner|admin|member)
+  donewhen workspace add <slug> <email> [role] grant a user access (owner|admin|member|viewer)
 `)
 }
 
@@ -286,7 +286,7 @@ func runWorkspace(args []string) {
 
 	case "add":
 		if len(args) < 3 {
-			log.Fatalf("usage: donewhen workspace add <slug> <email> [owner|admin|member]")
+			log.Fatalf("usage: donewhen workspace add <slug> <email> [owner|admin|member|viewer]")
 		}
 		role := "member"
 		if len(args) > 3 {

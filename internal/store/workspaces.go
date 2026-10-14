@@ -163,7 +163,7 @@ func (s *Store) AddMember(ctx context.Context, wsID, userID, role string) error 
 	if role == "" {
 		role = models.RoleMember
 	}
-	if role != models.RoleOwner && role != models.RoleAdmin && role != models.RoleMember {
+	if !models.IsValidRole(role) {
 		return fmt.Errorf("unknown role %q", role)
 	}
 	tx, err := s.pool.Begin(ctx)
